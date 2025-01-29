@@ -32,12 +32,10 @@ th {
 
 .valid-row {
     background-color: #e6ffe6;
-    /* Light green for valid rows */
 }
 
 .error-row {
     background-color: #ffe6e6;
-    /* Light red for error rows */
 }
 
 .error-message {

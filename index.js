@@ -16,9 +16,9 @@ function processCSV(csvData) {
     const validRows = [];
     const errorRows = [];
     const lines = csvData.split('\n').filter(line => line.trim() !== '');
-    const headers = lines[0].split(',').map(h => h.trim());
     const users = [];
     const userMap = {};
+    const graph = {};
 
     // Parse CSV data
     for (let i = 1; i < lines.length; i++) {
@@ -31,6 +31,51 @@ function processCSV(csvData) {
         };
         users.push(user);
         userMap[user.email] = user;
+
+        if (!graph[user.email]) graph[user.email] = [];
+        if (user.reportsTo) {
+            if (!graph[user.reportsTo]) graph[user.reportsTo] = [];
+            graph[user.reportsTo].push(user.email);
+        }
+    }
+
+    // Detect Cycles using DFS and mark affected users
+    function detectCycle(node, visited, recStack, path) {
+        if (!visited.has(node)) {
+            visited.add(node);
+            recStack.add(node);
+            path.push(node);
+
+            for (const child of graph[node] || []) {
+                if (!visited.has(child) && detectCycle(child, visited, recStack, path)) {
+                    return true;
+                } else if (recStack.has(child)) {
+                    // Cycle detected, mark affected users
+                    const cycleStartIndex = path.indexOf(child);
+                    if (cycleStartIndex !== -1) {
+                        for (let i = cycleStartIndex; i < path.length; i++) {
+                            const cycleUser = userMap[path[i]];
+                            if (cycleUser) {
+                                errorRows.push({ ...cycleUser, error: `Cycle detected (part of cycle)` });
+                            }
+                        }
+                    }
+                    return true;
+                }
+            }
+        }
+        recStack.delete(node);
+        path.pop();
+        return false;
+    }
+
+    const visited = new Set();
+    const recStack = new Set();
+
+    for (const user of users) {
+        if (!visited.has(user.email)) {
+            detectCycle(user.email, visited, recStack, []);
+        }
     }
 
     // Validate Root user
@@ -46,7 +91,7 @@ function processCSV(csvData) {
 
     // Validate all users
     users.forEach(user => {
-        if (user.role === 'Root') return;
+        if (user.role === 'Root' || errorRows.find(e => e.email === user.email)) return;
 
         let isValid = true;
         let errorMessage = '';
@@ -99,7 +144,6 @@ function processCSV(csvData) {
     });
 
     displayTable(validRows, errorRows);
-    displayErrors(errors);
 }
 
 function displayTable(validRows, errorRows) {
